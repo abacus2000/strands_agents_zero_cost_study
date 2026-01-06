@@ -1,0 +1,10 @@
+# VS Code settings
+.vscode/
+
+.ipynb_checkpoints/
+
+*.md
+
+*.sh
+
+*.txt
