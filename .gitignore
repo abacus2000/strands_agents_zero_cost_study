@@ -1,10 +1,12 @@
 # VS Code settings
 .vscode/
 
-.ipynb_checkpoints/
+*.py
 
-*.md
+.ipynb_checkpoints/
 
 *.sh
 
 *.txt
+
+Concepts/State/README.md
