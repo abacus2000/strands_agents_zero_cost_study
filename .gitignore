@@ -5,8 +5,12 @@
 
 .ipynb_checkpoints/
 
-*.sh
+__pycache__/
 
 *.txt
 
 Concepts/State/README.md
+
+*.md
+
+llama.cpp/
