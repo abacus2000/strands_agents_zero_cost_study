@@ -3,35 +3,39 @@
 set -e
 
 # Script to create AWS Lambda layers for Python packages
-# Usage: ./create-lambda-layer.sh <package_name> <python_version> [layer_name] [region]
+# Usage: ./create-lambda-layer.sh <package_names> <python_version> [layer_name] [region]
 # Example: ./create-lambda-layer.sh pandas 3.9
-# Example: ./create-lambda-layer.sh "pandas==2.0.3" 3.9 my-pandas-layer us-west-2
+# Example: ./create-lambda-layer.sh "pandas pyarrow" 3.9
+# Example: ./create-lambda-layer.sh "pandas==2.0.3 pyarrow==12.0.0" 3.9 my-data-layer us-west-2
 
-# Request arguments and show instructions when ran with no arguments 
+# Check if required arguments are provided
 if [ $# -lt 2 ]; then
-    echo "Usage: $0 <package_name> <python_version> [layer_name] [region]"
+    echo "Usage: $0 <package_names> <python_version> [layer_name] [region]"
     echo ""
     echo "Arguments:"
-    echo "  package_name    : Python package to install (e.g., pandas, numpy, requests)"
-    echo "                    Can include version (e.g., 'pandas==2.0.3')"
+    echo "  package_names   : Python package(s) to install (space-separated for multiple)"
+    echo "                    Single: pandas"
+    echo "                    Multiple: 'pandas pyarrow'"
+    echo "                    With versions: 'pandas==2.0.3 pyarrow==12.0.0'"
     echo "  python_version  : Python version for Lambda (e.g., 3.9, 3.10, 3.11, 3.12)"
     echo "  layer_name      : Optional. Name for the Lambda layer (default: <package>-layer)"
     echo "  region          : Optional. AWS region (default: us-east-1)"
     echo ""
     echo "Examples:"
     echo "  $0 pandas 3.9"
-    echo "  $0 'requests==2.28.0' 3.11 requests-layer us-west-2"
+    echo "  $0 'pandas pyarrow' 3.9"
+    echo "  $0 'requests urllib3' 3.11 http-layer us-west-2"
     exit 1
 fi
 
 # Parse arguments
-PACKAGE_NAME="$1"
+PACKAGE_NAMES="$1"
 PYTHON_VERSION="$2"
 
-# extract base package name (without version) for layer name
-BASE_PACKAGE=$(echo "$PACKAGE_NAME" | sed 's/[=<>].*//')
+# Extract first package name for default layer name
+FIRST_PACKAGE=$(echo "$PACKAGE_NAMES" | awk '{print $1}' | sed 's/[=<>].*//')
 
-LAYER_NAME="${3:-${BASE_PACKAGE}-layer}"
+LAYER_NAME="${3:-${FIRST_PACKAGE}-layer}"
 REGION="${4:-us-east-1}"
 
 # Determine Python runtime string
@@ -44,7 +48,7 @@ mkdir -p "$WORK_DIR/python"
 echo "========================================="
 echo "Lambda Layer Builder"
 echo "========================================="
-echo "Package:        $PACKAGE_NAME"
+echo "Packages:       $PACKAGE_NAMES"
 echo "Python Version: $PYTHON_VERSION"
 echo "Layer Name:     $LAYER_NAME"
 echo "Region:         $REGION"
@@ -52,8 +56,8 @@ echo "Runtime:        $RUNTIME"
 echo "========================================="
 echo ""
 
-# Install package with Lambda-compatible platform
-echo "Installing package for Lambda x86_64 platform..."
+# Install packages with Lambda-compatible platform
+echo "Installing packages for Lambda x86_64 platform..."
 pip3 install \
     --platform manylinux2014_x86_64 \
     --target="$WORK_DIR/python" \
@@ -61,7 +65,7 @@ pip3 install \
     --python-version "$PYTHON_VERSION" \
     --only-binary=:all: \
     --upgrade \
-    "$PACKAGE_NAME"
+    $PACKAGE_NAMES
 
 if [ $? -ne 0 ]; then
     echo "Error: Failed to install package"
@@ -83,7 +87,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Get zip file size
+# Show zip file size
 ZIP_SIZE=$(du -h "$ZIP_FILE" | cut -f1)
 echo "Layer zip created: $ZIP_FILE (Size: $ZIP_SIZE)"
 
@@ -91,12 +95,12 @@ echo "Layer zip created: $ZIP_FILE (Size: $ZIP_SIZE)"
 mv "$ZIP_FILE" ../"$ZIP_FILE"
 cd ..
 
-# Publish layer to AWS Lambda
+# publish layer to AWS Lambda
 echo ""
 echo "Publishing layer to AWS Lambda..."
 LAYER_ARN=$(aws lambda publish-layer-version \
     --layer-name "$LAYER_NAME" \
-    --description "Lambda layer for $PACKAGE_NAME (Python $PYTHON_VERSION, x86_64)" \
+    --description "Lambda layer for $PACKAGE_NAMES (Python $PYTHON_VERSION, x86_64)" \
     --zip-file "fileb://$ZIP_FILE" \
     --compatible-runtimes "$RUNTIME" \
     --region "$REGION" \
@@ -109,7 +113,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Clean up
 echo ""
 echo "Cleaning up temporary files..."
 rm -rf "$WORK_DIR"
